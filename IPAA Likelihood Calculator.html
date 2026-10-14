@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IPAA Likelihood Calculator</title>
+<style>
+:root{--bg:#f7f6f2;--card:#fff;--tx:#1d2330;--mut:#667085;--bd:#dcdfe6;--ac:#1f6f8b;--acb:#e3f1f6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171d;--card:#1d222b;--tx:#e8eaf0;--mut:#9aa3b2;--bd:#323946;--ac:#6cc3dd;--acb:#1c3440}}
+:root[data-theme="dark"]{--bg:#14171d;--card:#1d222b;--tx:#e8eaf0;--mut:#9aa3b2;--bd:#323946;--ac:#6cc3dd;--acb:#1c3440}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:720px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:22px;margin:0 0 4px}p.s{color:var(--mut);margin:0 0 16px;font-size:13px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px;margin-bottom:14px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+label{display:block;font-size:13px;color:var(--mut);margin-bottom:3px}
+input[type=number],select{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+.res{background:var(--acb);border-color:var(--ac)}
+.big{font-size:34px;font-weight:700;color:var(--ac)}
+.row{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.bar{height:10px;background:var(--bd);border-radius:6px;overflow:hidden;margin:8px 0}
+.bar i{display:block;height:100%;background:var(--ac);width:0}
+.note{font-size:12px;color:var(--mut)}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:4px 6px;border-bottom:1px solid var(--bd);text-align:left}
+.sc{overflow-x:auto}
+</style></head><body><main>
+<h1>IPAA Likelihood Calculator</h1>
+<p class="s">UC patients after colectomy: time-dependent likelihood of ileal pouch–anal anastomosis (IPAA) vs. end ileostomy, from a Cox regression (n=210; 76 IPAA).</p>
+
+<div class="card"><div class="g">
+<div><label>Age at UC diagnosis (years)</label><input id="age" type="number" value="41" min="1" max="90"></div>
+<div><label>Years from diagnosis to first CRS evaluation</label><input id="yrs" type="number" value="8" min="0" max="60"></div>
+<div><label>Preoperative BMI (kg/m²)</label><input id="bmi" type="number" value="27.5" min="12" max="70" step="0.1"></div>
+<div><label>Gender</label><select id="male"><option value="0">Female</option><option value="1">Male</option></select></div>
+<div><label>Received maintenance biologic</label><select id="bio"><option value="0">No</option><option value="1">Yes</option></select></div>
+<div><label>Indication</label><select id="ind"><option value="1">Medically refractory UC</option><option value="0">Dysplasia / pseudopolyposis / cancer / benign stricture</option></select></div>
+<div><label>Operative setting</label><select id="elec"><option value="1">Elective</option><option value="0">Urgent / emergent</option></select></div>
+<div><label>Operative approach</label><select id="app"><option value="ra">Robotic-assisted (reference)</option><option value="lap">Laparoscopic</option><option value="open">Open</option></select></div>
+</div></div>
+
+<div class="card res" id="out">
+<div class="row"><div><div class="note">Hazard of IPAA vs. average patient in cohort</div><div class="big" id="rh">–</div><div class="note" id="rhd"></div></div>
+<div><div class="note">Estimated probability of IPAA by horizon</div><div class="big" id="pp">–</div></div></div>
+<div class="bar"><i id="bar"></i></div>
+<label for="p0">Baseline: probability of IPAA for an average patient at your time horizon (%)</label>
+<input id="p0" type="number" value="36" min="1" max="99" step="1">
+<p class="note">Cox models do not report a baseline hazard, so absolute risk cannot be derived from the table alone. The default 36% is the crude cohort proportion with IPAA (76/210) at last follow-up (mean ≈ 44 months). Replace it with the Kaplan–Meier/baseline estimate at your horizon of interest. Estimate = 1 − (1 − p₀)<sup>HR</sup>.</p>
+</div>
+
+<div class="card sc"><b>Model coefficients</b>
+<table><thead><tr><th>Variable</th><th>B</th><th>HR (95% CI)</th><th>p</th></tr></thead><tbody id="tb"></tbody></table></div>
+<p class="note">Research/educational tool, not validated for clinical decision-making. Note: the supplied table is a Cox proportional hazards model (hazard ratios), not logistic regression, so the calculator is built accordingly. Significant predictors: older age at diagnosis, higher preoperative BMI, and open (vs. robotic) approach were each associated with a lower IPAA hazard.</p>
+
+<script>
+const B={age:-0.035,yrs:-0.025,bmi:-0.065,male:0.398,bio:0.458,ind:0.144,elec:0.266,lap:-0.897,open:-0.848};
+// cohort reference (Table: overall means / proportions)
+const R={age:41,yrs:8,bmi:27.5,male:.562,bio:.70,ind:.714,elec:.59,lap:.376,open:.10};
+const rows=[["Age at UC diagnosis (per yr)","-0.035","0.966 (0.950–0.981)","<0.001"],["Male","0.398","1.489 (0.927–2.393)","0.100"],["Years to first CRS evaluation","-0.025","0.975 (0.947–1.004)","0.090"],["Maintenance biologic","0.458","1.582 (0.835–2.996)","0.159"],["Preop BMI (per kg/m²)","-0.065","0.937 (0.898–0.978)","0.003"],["Medically refractory UC","0.144","1.155 (0.590–2.262)","0.675"],["Elective setting","0.266","1.304 (0.740–2.298)","0.358"],["Lap vs RA","-0.897","0.408 (0.139–1.200)","0.103"],["Open vs RA","-0.848","0.428 (0.248–0.741)","0.002"]];
+document.getElementById("tb").innerHTML=rows.map(r=>"<tr>"+r.map(c=>"<td>"+c+"</td>").join("")+"</tr>").join("");
+const v=id=>parseFloat(document.getElementById(id).value)||0;
+function calc(){
+ const a=document.getElementById("app").value;
+ const x={age:v("age"),yrs:v("yrs"),bmi:v("bmi"),male:v("male"),bio:v("bio"),ind:v("ind"),elec:v("elec"),lap:a==="lap"?1:0,open:a==="open"?1:0};
+ let d=0;for(const k in B)d+=B[k]*(x[k]-R[k]);
+ const hr=Math.exp(d);
+ const p0=Math.min(.99,Math.max(.01,v("p0")/100));
+ const p=1-Math.pow(1-p0,hr);
+ document.getElementById("rh").textContent=hr.toFixed(2)+"×";
+ document.getElementById("rhd").textContent=hr>1.1?"Higher likelihood of IPAA than average":hr<.9?"Lower likelihood of IPAA than average":"Similar to average";
+ document.getElementById("pp").textContent=(p*100).toFixed(0)+"%";
+ document.getElementById("bar").style.width=(p*100)+"%";
+}
+document.querySelectorAll("input,select").forEach(e=>e.addEventListener("input",calc));calc();
+</script></main></body></html>
